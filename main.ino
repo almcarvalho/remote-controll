@@ -29,7 +29,7 @@ bool estadoLed = false;
 
 String ultimoCodigoRaw = "";
 String teclasSalvas = "";
-String scene = "";
+String cenasSalvas = "";
 
 void alternarLed() {
   estadoLed = !estadoLed;
@@ -38,21 +38,15 @@ void alternarLed() {
 
 void beepSucesso() {
   ledcAttach(BUZZER_PIN, 2000, 8);
-
   ledcWriteTone(BUZZER_PIN, 2000);
-
   delay(150);
-
   ledcWriteTone(BUZZER_PIN, 0);
 }
 
 void beepExecucaoCena() {
   ledcAttach(BUZZER_PIN, 2000, 8);
-
   ledcWriteTone(BUZZER_PIN, 2600);
-
   delay(80);
-
   ledcWriteTone(BUZZER_PIN, 0);
 }
 
@@ -71,12 +65,32 @@ void beepOkWifi() {
   ledcWriteTone(BUZZER_PIN, 0);
 }
 
+String limparNome(String nome) {
+  nome.trim();
+  nome.replace(" ", "_");
+  nome.replace("|", "_");
+  nome.replace(":", "_");
+  nome.replace("/", "_");
+  nome.replace("\\", "_");
+  nome.replace("?", "_");
+  nome.replace("&", "_");
+  nome.replace("=", "_");
+  return nome;
+}
+
+bool itemExisteNaLista(String lista, String nome) {
+  String busca = "|" + nome + "|";
+  return lista.indexOf(busca) >= 0;
+}
+
 bool teclaJaExiste(String nome) {
   teclasSalvas = prefs.getString("teclas", "");
+  return itemExisteNaLista(teclasSalvas, nome);
+}
 
-  String busca = "|" + nome + "|";
-
-  return teclasSalvas.indexOf(busca) >= 0;
+bool cenaJaExiste(String nome) {
+  cenasSalvas = prefs.getString("cenas", "");
+  return itemExisteNaLista(cenasSalvas, nome);
 }
 
 void adicionarTeclaNaLista(String nome) {
@@ -84,13 +98,52 @@ void adicionarTeclaNaLista(String nome) {
 
   if (!teclaJaExiste(nome)) {
     teclasSalvas += "|" + nome + "|";
-
     prefs.putString("teclas", teclasSalvas);
   }
 }
 
+void adicionarCenaNaLista(String nome) {
+  cenasSalvas = prefs.getString("cenas", "");
+
+  if (!cenaJaExiste(nome)) {
+    cenasSalvas += "|" + nome + "|";
+    prefs.putString("cenas", cenasSalvas);
+  }
+}
+
+String removerItemDaLista(String lista, String nome) {
+  String novaLista = "";
+
+  int start = 0;
+
+  while (true) {
+    int ini = lista.indexOf('|', start);
+
+    if (ini == -1) break;
+
+    int fim = lista.indexOf('|', ini + 1);
+
+    if (fim == -1) break;
+
+    String item = lista.substring(ini + 1, fim);
+    item.trim();
+
+    if (item != nome && item.length() > 0) {
+      novaLista += "|" + item + "|";
+    }
+
+    start = fim + 1;
+  }
+
+  return novaLista;
+}
+
 String getCodigoTecla(String nome) {
   return prefs.getString(("key_" + nome).c_str(), "");
+}
+
+String getCena(String nome) {
+  return prefs.getString(("scene_" + nome).c_str(), "");
 }
 
 void conectarWiFi() {
@@ -111,11 +164,8 @@ void conectarWiFi() {
 
   if (!conectado) {
     Serial.println("Falha WiFi. Reiniciando...");
-
     digitalWrite(LED_PLACA, LOW);
-
     delay(2000);
-
     ESP.restart();
   }
 
@@ -194,30 +244,49 @@ void enviarCodigo(String nome) {
   }
 }
 
-void executarCena() {
-  scene = prefs.getString("scene", "");
+void executarCena(String nomeCena) {
+  String scene = getCena(nomeCena);
+
+  if (scene == "") {
+    Serial.println("Cena não encontrada: " + nomeCena);
+    return;
+  }
+
+  Serial.println("Executando cena: " + nomeCena);
 
   int start = 0;
 
   while (true) {
     int sep = scene.indexOf('|', start);
 
-    String nome;
+    String item;
 
     if (sep == -1) {
-      nome = scene.substring(start);
+      item = scene.substring(start);
     } else {
-      nome = scene.substring(start, sep);
+      item = scene.substring(start, sep);
     }
 
-    nome.trim();
+    item.trim();
 
-    if (nome.length() > 0) {
-      Serial.println("Executando tecla: " + nome);
+    if (item.length() > 0) {
+      if (item.startsWith("delay:")) {
+        String valorDelay = item.substring(6);
+        int segundos = valorDelay.toInt();
 
-      enviarCodigo(nome);
+        if (segundos > 0) {
+          Serial.print("Aguardando delay de ");
+          Serial.print(segundos);
+          Serial.println(" segundos");
 
-      delay(1000);
+          delay(segundos * 1000);
+        }
+
+      } else {
+        Serial.println("Executando tecla: " + item);
+        enviarCodigo(item);
+        delay(1000);
+      }
     }
 
     if (sep == -1) break;
@@ -227,7 +296,6 @@ void executarCena() {
 }
 
 String botoesTeclasHtml() {
-
   teclasSalvas = prefs.getString("teclas", "");
 
   String html = "";
@@ -235,7 +303,6 @@ String botoesTeclasHtml() {
   int start = 0;
 
   while (true) {
-
     int ini = teclasSalvas.indexOf('|', start);
 
     if (ini == -1) break;
@@ -245,34 +312,24 @@ String botoesTeclasHtml() {
     if (fim == -1) break;
 
     String nome = teclasSalvas.substring(ini + 1, fim);
-
     nome.trim();
 
     if (nome.length() > 0) {
-
       html += "<div style='display:flex;align-items:center;margin-bottom:10px;'>";
 
-      // BOTÃO ENVIAR
       html += "<button class='success' onclick=\"enviarTecla('";
       html += nome;
-      html += "')\">";
-      html += "Enviar";
-      html += "</button>";
+      html += "')\">Enviar</button>";
 
-      // BOTÃO PRINCIPAL
       html += "<button class='teclaBtn' style='margin-left:6px;' onclick=\"mostrarCodigo('";
       html += nome;
       html += "')\">";
       html += nome;
       html += "</button>";
 
-      // BOTÃO EXCLUIR
-      html += "<button class='danger' style='margin-left:6px;' ";
-      html += "onclick=\"excluirTecla('";
+      html += "<button class='danger' style='margin-left:6px;' onclick=\"excluirTecla('";
       html += nome;
-      html += "')\">";
-      html += "Excluir";
-      html += "</button>";
+      html += "')\">Excluir</button>";
 
       html += "</div>";
     }
@@ -304,7 +361,6 @@ String opcoesTeclasHtml() {
     if (fim == -1) break;
 
     String nome = teclasSalvas.substring(ini + 1, fim);
-
     nome.trim();
 
     if (nome.length() > 0) {
@@ -321,10 +377,61 @@ String opcoesTeclasHtml() {
   return html;
 }
 
-String htmlPage() {
+String cenasHtml() {
+  cenasSalvas = prefs.getString("cenas", "");
+
   String html = "";
 
-  scene = prefs.getString("scene", "");
+  int start = 0;
+
+  while (true) {
+    int ini = cenasSalvas.indexOf('|', start);
+
+    if (ini == -1) break;
+
+    int fim = cenasSalvas.indexOf('|', ini + 1);
+
+    if (fim == -1) break;
+
+    String nome = cenasSalvas.substring(ini + 1, fim);
+    nome.trim();
+
+    if (nome.length() > 0) {
+      html += "<div style='display:flex;align-items:center;margin-bottom:10px;'>";
+
+      html += "<button class='sceneBtn' onclick=\"carregarCenaDoServidor('";
+      html += nome;
+      html += "')\">";
+      html += nome;
+      html += "</button>";
+
+      html += "<button class='success' style='margin-left:6px;' onclick=\"acionarCena('";
+      html += nome;
+      html += "')\">Acionar</button>";
+
+      html += "<button class='danger' style='margin-left:6px;' onclick=\"excluirCena('";
+      html += nome;
+      html += "')\">Excluir</button>";
+
+      html += "<span style='margin-left:8px;color:#555;'>Rota: /acionar?cena=";
+      html += nome;
+      html += "</span>";
+
+      html += "</div>";
+    }
+
+    start = fim + 1;
+  }
+
+  if (html == "") {
+    html = "<p>Nenhuma cena salva ainda.</p>";
+  }
+
+  return html;
+}
+
+String htmlPage() {
+  String html = "";
 
   html += "<!DOCTYPE html>";
   html += "<html>";
@@ -341,7 +448,10 @@ String htmlPage() {
   html += ".danger{background:#c62828;}";
   html += ".success{background:#2e7d32;}";
   html += ".teclaBtn{background:#6a1b9a;}";
+  html += ".delayBtn{background:#ef6c00;}";
+  html += ".sceneBtn{background:#455a64;}";
   html += ".itemCena{padding:10px;margin:6px;background:#e3f2fd;border:1px solid #90caf9;border-radius:6px;cursor:move;}";
+  html += ".itemDelay{background:#fff3e0;border:1px solid #ffb74d;}";
   html += "textarea{width:100%;box-sizing:border-box;}";
   html += "input{padding:10px;width:70%;max-width:300px;}";
   html += "</style>";
@@ -358,7 +468,6 @@ String htmlPage() {
   html += "</div>";
 
   html += "<div class='card'>";
-
   html += "<h3>1. Capturar tecla</h3>";
 
   if (modoCaptura) {
@@ -372,69 +481,66 @@ String htmlPage() {
   html += "</form>";
 
   html += "<p><b>Último código capturado:</b></p>";
-
   html += "<textarea rows='5'>";
   html += ultimoCodigoRaw;
   html += "</textarea>";
 
   html += "<h3>Salvar tecla capturada</h3>";
-
   html += "<form action='/salvar'>";
   html += "<input name='nome' placeholder='Ex: power, canal_5'>";
   html += "<button class='success' type='submit'>Salvar</button>";
   html += "</form>";
-
   html += "</div>";
 
   html += "<div class='card'>";
   html += "<h3>2. Teclas salvas</h3>";
   html += "<p>Clique no botão da tecla para ver o código.</p>";
-
   html += botoesTeclasHtml();
-
   html += "<p><b>Código da tecla selecionada:</b></p>";
-
   html += "<textarea id='codigoSelecionado' rows='6'></textarea>";
-
   html += "</div>";
 
   html += "<div class='card'>";
-  html += "<h3>3. Configurar cena</h3>";
+  html += "<h3>3. Cenas salvas</h3>";
+  html += "<p>Clique no nome da cena para carregar e editar.</p>";
+  html += cenasHtml();
+  html += "</div>";
+
+  html += "<div class='card'>";
+  html += "<h3>4. Configurar cena</h3>";
+
+  html += "<p><b>Nome da cena:</b></p>";
+  html += "<input id='nomeCena' placeholder='Ex: tv' value='tv'>";
 
   html += "<p>Clique nas teclas para adicionar na cena. Arraste para ordenar.</p>";
-
   html += opcoesTeclasHtml();
 
-  html += "<h4>Ordem da cena</h4>";
+  html += "<hr>";
 
+  html += "<h4>Adicionar delay</h4>";
+  html += "<p>Digite quantos segundos a cena deve esperar quando chegar nesse item.</p>";
+  html += "<input id='delaySegundos' type='number' min='1' value='10' placeholder='Segundos'>";
+  html += "<button class='delayBtn' onclick='adicionarDelayNaCena()'>Adicionar delay</button>";
+
+  html += "<h4>Ordem da cena</h4>";
   html += "<div id='listaCena'></div>";
 
   html += "<br>";
-
   html += "<button class='success' onclick='salvarCena()'>Salvar cena</button>";
+  html += "<button class='danger' onclick='limparCena()'>Limpar montagem</button>";
 
-  html += "<button class='danger' onclick='limparCena()'>Limpar cena</button>";
+  html += "<p><b>Rota da cena atual:</b></p>";
+  html += "<pre id='rotaCenaAtual'>/acionar?cena=tv</pre>";
 
-  html += "<p><b>Cena salva:</b></p>";
-
-  html += "<pre id='sceneAtual'>";
-  html += scene;
-  html += "</pre>";
+  html += "<p><b>Dados da cena carregada:</b></p>";
+  html += "<pre id='sceneAtual'></pre>";
 
   html += "</div>";
 
   html += "<div class='card'>";
-
-  html += "<h3>4. Executar</h3>";
-
-  html += "<form action='/ligar-tv'>";
-
-  html += "<button class='success' type='submit'>";
-  html += "Executar cena / Ligar TV";
-  html += "</button>";
-
-  html += "</form>";
-
+  html += "<h3>5. Acionar cena por rota</h3>";
+  html += "<p>Agora a rota é:</p>";
+  html += "<pre>/acionar?cena=tv</pre>";
   html += "</div>";
 
   html += "<div class='card'>";
@@ -445,22 +551,31 @@ String htmlPage() {
 
   html += "let cena=[];";
 
-  html += "function carregarCenaSalva(){";
-  html += "let salva='";
-  html += scene;
-  html += "';";
-  html += "if(salva.length>0){";
-  html += "cena=salva.split('|').filter(x=>x.trim().length>0);";
-  html += "renderizarCena();";
+  html += "function nomeCenaAtual(){";
+  html += "let nome=document.getElementById('nomeCena').value.trim();";
+  html += "nome=nome.replaceAll(' ','_');";
+  html += "if(nome.length===0){nome='tv';}";
+  html += "document.getElementById('nomeCena').value=nome;";
+  html += "document.getElementById('rotaCenaAtual').innerText='/acionar?cena='+nome;";
+  html += "return nome;";
   html += "}";
+
+  html += "document.addEventListener('input',function(e){";
+  html += "if(e.target && e.target.id==='nomeCena'){nomeCenaAtual();}";
+  html += "});";
+
+  html += "function nomeVisual(item){";
+  html += "if(item.startsWith('delay:')){";
+  html += "let segundos=item.replace('delay:','');";
+  html += "return 'Delay de '+segundos+' segundo(s)';";
+  html += "}";
+  html += "return item;";
   html += "}";
 
   html += "function mostrarCodigo(nome){";
   html += "fetch('/codigo?nome='+encodeURIComponent(nome))";
   html += ".then(r=>r.text())";
-  html += ".then(t=>{";
-  html += "document.getElementById('codigoSelecionado').value=t;";
-  html += "});";
+  html += ".then(t=>{document.getElementById('codigoSelecionado').value=t;});";
   html += "}";
 
   html += "function enviarTecla(nome){";
@@ -470,22 +585,11 @@ String htmlPage() {
   html += "}";
 
   html += "function excluirTecla(nome){";
-
   html += "let confirmar=confirm('Deseja excluir essa tecla?');";
-
-  html += "if(!confirmar){";
-  html += "return;";
-  html += "}";
-
+  html += "if(!confirmar){return;}";
   html += "fetch('/excluir-tecla?nome='+encodeURIComponent(nome))";
-
   html += ".then(r=>r.text())";
-
-  html += ".then(t=>{";
-  html += "alert(t);";
-  html += "location.reload();";
-  html += "});";
-
+  html += ".then(t=>{alert(t);location.reload();});";
   html += "}";
 
   html += "function adicionarNaCena(nome){";
@@ -493,32 +597,31 @@ String htmlPage() {
   html += "renderizarCena();";
   html += "}";
 
+  html += "function adicionarDelayNaCena(){";
+  html += "let segundos=document.getElementById('delaySegundos').value;";
+  html += "segundos=parseInt(segundos);";
+  html += "if(!segundos || segundos<=0){alert('Informe um delay válido em segundos');return;}";
+  html += "cena.push('delay:'+segundos);";
+  html += "renderizarCena();";
+  html += "}";
+
   html += "function renderizarCena(){";
-
   html += "let div=document.getElementById('listaCena');";
-
   html += "div.innerHTML='';";
-
-  html += "cena.forEach((nome,index)=>{";
-
+  html += "cena.forEach((itemCena,index)=>{";
   html += "let item=document.createElement('div');";
-
   html += "item.className='itemCena';";
-
+  html += "if(itemCena.startsWith('delay:')){item.className='itemCena itemDelay';}";
   html += "item.draggable=true;";
-
   html += "item.dataset.index=index;";
-
-  html += "item.innerHTML=(index+1)+' - '+nome+";
-  html += "\" <button onclick='removerItem(\"+index+\")'>Remover</button>\";";
-
+  html += "item.innerHTML=(index+1)+' - '+nomeVisual(itemCena)+\" <button onclick='removerItem(\"+index+\")'>Remover</button>\";";
   html += "item.addEventListener('dragstart',dragStart);";
   html += "item.addEventListener('dragover',dragOver);";
   html += "item.addEventListener('drop',dropItem);";
-
   html += "div.appendChild(item);";
-
   html += "});";
+  html += "document.getElementById('sceneAtual').innerText=cena.join('|');";
+  html += "nomeCenaAtual();";
   html += "}";
 
   html += "let dragIndex=null;";
@@ -532,15 +635,10 @@ String htmlPage() {
   html += "}";
 
   html += "function dropItem(e){";
-
   html += "e.preventDefault();";
-
   html += "let dropIndex=Number(e.currentTarget.dataset.index);";
-
   html += "let item=cena.splice(dragIndex,1)[0];";
-
   html += "cena.splice(dropIndex,0,item);";
-
   html += "renderizarCena();";
   html += "}";
 
@@ -555,20 +653,38 @@ String htmlPage() {
   html += "}";
 
   html += "function salvarCena(){";
-
+  html += "let nome=nomeCenaAtual();";
   html += "let valor=cena.join('|');";
-
-  html += "fetch('/salvar-cena?scene='+encodeURIComponent(valor))";
-
+  html += "fetch('/salvar-cena?nome='+encodeURIComponent(nome)+'&scene='+encodeURIComponent(valor))";
   html += ".then(r=>r.text())";
+  html += ".then(t=>{alert(t);location.reload();});";
+  html += "}";
 
+  html += "function carregarCenaDoServidor(nome){";
+  html += "document.getElementById('nomeCena').value=nome;";
+  html += "fetch('/ver-cena?nome='+encodeURIComponent(nome))";
+  html += ".then(r=>r.text())";
   html += ".then(t=>{";
-  html += "alert(t);";
-  html += "location.reload();";
+  html += "cena=t.split('|').filter(x=>x.trim().length>0);";
+  html += "renderizarCena();";
   html += "});";
   html += "}";
 
-  html += "carregarCenaSalva();";
+  html += "function excluirCena(nome){";
+  html += "let confirmar=confirm('Deseja excluir a cena '+nome+'?');";
+  html += "if(!confirmar){return;}";
+  html += "fetch('/excluir-cena?nome='+encodeURIComponent(nome))";
+  html += ".then(r=>r.text())";
+  html += ".then(t=>{alert(t);location.reload();});";
+  html += "}";
+
+  html += "function acionarCena(nome){";
+  html += "fetch('/acionar?cena='+encodeURIComponent(nome))";
+  html += ".then(r=>r.text())";
+  html += ".then(t=>alert(t));";
+  html += "}";
+
+  html += "renderizarCena();";
 
   html += "</script>";
 
@@ -582,7 +698,7 @@ void setupRotas() {
 
   server.on("/", []() {
     teclasSalvas = prefs.getString("teclas", "");
-    scene = prefs.getString("scene", "");
+    cenasSalvas = prefs.getString("cenas", "");
 
     server.send(200, "text/html", htmlPage());
   });
@@ -598,17 +714,12 @@ void setupRotas() {
   });
 
   server.on("/salvar", []() {
-
     if (!server.hasArg("nome")) {
       server.send(400, "text/plain", "Informe o nome da tecla");
       return;
     }
 
-    String nome = server.arg("nome");
-
-    nome.trim();
-
-    nome.replace(" ", "_");
+    String nome = limparNome(server.arg("nome"));
 
     if (nome == "") {
       server.send(400, "text/plain", "Nome inválido");
@@ -634,7 +745,6 @@ void setupRotas() {
   });
 
   server.on("/codigo", []() {
-
     if (!server.hasArg("nome")) {
       server.send(400, "text/plain", "Informe o nome");
       return;
@@ -648,7 +758,6 @@ void setupRotas() {
   });
 
   server.on("/enviar", []() {
-
     if (!server.hasArg("nome")) {
       server.send(400, "text/plain", "Informe o nome");
       return;
@@ -662,11 +771,8 @@ void setupRotas() {
   });
 
   server.on("/excluir-tecla", []() {
-
     if (!server.hasArg("nome")) {
-
       server.send(400, "text/plain", "Informe o nome");
-
       return;
     }
 
@@ -676,31 +782,7 @@ void setupRotas() {
 
     teclasSalvas = prefs.getString("teclas", "");
 
-    String novaLista = "";
-
-    int start = 0;
-
-    while (true) {
-
-      int ini = teclasSalvas.indexOf('|', start);
-
-      if (ini == -1) break;
-
-      int fim = teclasSalvas.indexOf('|', ini + 1);
-
-      if (fim == -1) break;
-
-      String item = teclasSalvas.substring(ini + 1, fim);
-
-      item.trim();
-
-      if (item != nome && item.length() > 0) {
-
-        novaLista += "|" + item + "|";
-      }
-
-      start = fim + 1;
-    }
+    String novaLista = removerItemDaLista(teclasSalvas, nome);
 
     prefs.putString("teclas", novaLista);
 
@@ -712,35 +794,90 @@ void setupRotas() {
   });
 
   server.on("/salvar-cena", []() {
+    if (!server.hasArg("nome")) {
+      server.send(400, "text/plain", "Informe o nome da cena");
+      return;
+    }
 
     if (!server.hasArg("scene")) {
       server.send(400, "text/plain", "Cena inválida");
       return;
     }
 
-    scene = server.arg("scene");
+    String nome = limparNome(server.arg("nome"));
 
-    prefs.putString("scene", scene);
+    if (nome == "") {
+      server.send(400, "text/plain", "Nome da cena inválido");
+      return;
+    }
+
+    String scene = server.arg("scene");
+
+    prefs.putString(("scene_" + nome).c_str(), scene);
+
+    adicionarCenaNaLista(nome);
 
     Serial.println("Cena salva:");
+    Serial.println(nome);
     Serial.println(scene);
 
     beepSucesso();
 
-    server.send(200, "text/plain", "Cena salva com sucesso");
+    server.send(200, "text/plain", "Cena salva com sucesso: " + nome);
   });
 
-  server.on("/ligar-tv", []() {
+  server.on("/ver-cena", []() {
+    if (!server.hasArg("nome")) {
+      server.send(400, "text/plain", "Informe o nome da cena");
+      return;
+    }
 
-    Serial.println("Executando cena...");
+    String nome = server.arg("nome");
 
-    executarCena();
+    String scene = getCena(nome);
 
-    server.send(200, "text/plain", "Cena executada");
+    server.send(200, "text/plain", scene);
+  });
+
+  server.on("/excluir-cena", []() {
+    if (!server.hasArg("nome")) {
+      server.send(400, "text/plain", "Informe o nome da cena");
+      return;
+    }
+
+    String nome = server.arg("nome");
+
+    prefs.remove(("scene_" + nome).c_str());
+
+    cenasSalvas = prefs.getString("cenas", "");
+
+    String novaLista = removerItemDaLista(cenasSalvas, nome);
+
+    prefs.putString("cenas", novaLista);
+
+    Serial.println("Cena removida: " + nome);
+
+    beepSucesso();
+
+    server.send(200, "text/plain", "Cena excluída com sucesso: " + nome);
+  });
+
+  server.on("/acionar", []() {
+    if (!server.hasArg("cena")) {
+      server.send(400, "text/plain", "Informe a cena. Exemplo: /acionar?cena=tv");
+      return;
+    }
+
+    String nomeCena = server.arg("cena");
+
+    Serial.println("Acionando cena pela rota: " + nomeCena);
+
+    executarCena(nomeCena);
+
+    server.send(200, "text/plain", "Cena acionada: " + nomeCena);
   });
 
   server.on("/reset-wifi", []() {
-
     wm.resetSettings();
 
     digitalWrite(LED_PLACA, LOW);
@@ -754,7 +891,6 @@ void setupRotas() {
 }
 
 void setup() {
-
   Serial.begin(115200);
 
   pinMode(LED_PLACA, OUTPUT);
@@ -766,7 +902,7 @@ void setup() {
   prefs.begin("controle-ir", false);
 
   teclasSalvas = prefs.getString("teclas", "");
-  scene = prefs.getString("scene", "");
+  cenasSalvas = prefs.getString("cenas", "");
 
   irrecv.enableIRIn();
 
@@ -778,11 +914,9 @@ void setup() {
 }
 
 void loop() {
-
   server.handleClient();
 
   if (modoCaptura && irrecv.decode(&results)) {
-
     ultimoCodigoRaw = rawToString(&results);
 
     Serial.println("");
