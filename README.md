@@ -10,14 +10,19 @@ The main goal of this project is to support accessibility, home automation, and 
 Protótipo:
 
 #define IR_RECV_PIN 15 (https://www.robocore.net/radio-frequencia-infravermelho/modulo-receptor-ir)
+
 #define IR_SEND_PIN 4 (https://www.robocore.net/radio-frequencia-infravermelho/kit-receptor-e-emissor-ir-5mm)
+
 #define BUZZER_PIN 27 (https://www.robocore.net/atuador/buzzer-5v-passivo)
+
 #define LED_PLACA 2 
 
 Esp32:
 https://www.robocore.net/wifi/esp32-wifi-bluetooth
+
 Protoboard:
 https://www.robocore.net/protoboard/protoboard-400-pontos
+
 
 Cupom de desconto na robocore.net:
 LCSISTEMAS
