@@ -227,6 +227,7 @@ void executarCena() {
 }
 
 String botoesTeclasHtml() {
+
   teclasSalvas = prefs.getString("teclas", "");
 
   String html = "";
@@ -234,6 +235,7 @@ String botoesTeclasHtml() {
   int start = 0;
 
   while (true) {
+
     int ini = teclasSalvas.indexOf('|', start);
 
     if (ini == -1) break;
@@ -247,15 +249,32 @@ String botoesTeclasHtml() {
     nome.trim();
 
     if (nome.length() > 0) {
-      html += "<button class='teclaBtn' onclick=\"mostrarCodigo('";
+
+      html += "<div style='display:flex;align-items:center;margin-bottom:10px;'>";
+
+      // BOTÃO ENVIAR
+      html += "<button class='success' onclick=\"enviarTecla('";
+      html += nome;
+      html += "')\">";
+      html += "Enviar";
+      html += "</button>";
+
+      // BOTÃO PRINCIPAL
+      html += "<button class='teclaBtn' style='margin-left:6px;' onclick=\"mostrarCodigo('";
       html += nome;
       html += "')\">";
       html += nome;
-      html += "</button> ";
+      html += "</button>";
 
-      html += "<button onclick=\"enviarTecla('";
+      // BOTÃO EXCLUIR
+      html += "<button class='danger' style='margin-left:6px;' ";
+      html += "onclick=\"excluirTecla('";
       html += nome;
-      html += "')\">Enviar</button><br><br>";
+      html += "')\">";
+      html += "Excluir";
+      html += "</button>";
+
+      html += "</div>";
     }
 
     start = fim + 1;
@@ -369,7 +388,7 @@ String htmlPage() {
 
   html += "<div class='card'>";
   html += "<h3>2. Teclas salvas</h3>";
-  html += "<p>Clique no botão para ver o código da tecla.</p>";
+  html += "<p>Clique no botão da tecla para ver o código.</p>";
 
   html += botoesTeclasHtml();
 
@@ -424,7 +443,7 @@ String htmlPage() {
 
   html += "<script>";
 
-  html += "let cena = [];";
+  html += "let cena=[];";
 
   html += "function carregarCenaSalva(){";
   html += "let salva='";
@@ -450,13 +469,34 @@ String htmlPage() {
   html += ".then(t=>alert(t));";
   html += "}";
 
+  html += "function excluirTecla(nome){";
+
+  html += "let confirmar=confirm('Deseja excluir essa tecla?');";
+
+  html += "if(!confirmar){";
+  html += "return;";
+  html += "}";
+
+  html += "fetch('/excluir-tecla?nome='+encodeURIComponent(nome))";
+
+  html += ".then(r=>r.text())";
+
+  html += ".then(t=>{";
+  html += "alert(t);";
+  html += "location.reload();";
+  html += "});";
+
+  html += "}";
+
   html += "function adicionarNaCena(nome){";
   html += "cena.push(nome);";
   html += "renderizarCena();";
   html += "}";
 
   html += "function renderizarCena(){";
+
   html += "let div=document.getElementById('listaCena');";
+
   html += "div.innerHTML='';";
 
   html += "cena.forEach((nome,index)=>{";
@@ -492,6 +532,7 @@ String htmlPage() {
   html += "}";
 
   html += "function dropItem(e){";
+
   html += "e.preventDefault();";
 
   html += "let dropIndex=Number(e.currentTarget.dataset.index);";
@@ -538,6 +579,7 @@ String htmlPage() {
 }
 
 void setupRotas() {
+
   server.on("/", []() {
     teclasSalvas = prefs.getString("teclas", "");
     scene = prefs.getString("scene", "");
@@ -556,6 +598,7 @@ void setupRotas() {
   });
 
   server.on("/salvar", []() {
+
     if (!server.hasArg("nome")) {
       server.send(400, "text/plain", "Informe o nome da tecla");
       return;
@@ -591,6 +634,7 @@ void setupRotas() {
   });
 
   server.on("/codigo", []() {
+
     if (!server.hasArg("nome")) {
       server.send(400, "text/plain", "Informe o nome");
       return;
@@ -604,6 +648,7 @@ void setupRotas() {
   });
 
   server.on("/enviar", []() {
+
     if (!server.hasArg("nome")) {
       server.send(400, "text/plain", "Informe o nome");
       return;
@@ -616,7 +661,58 @@ void setupRotas() {
     server.send(200, "text/plain", "Enviado: " + nome);
   });
 
+  server.on("/excluir-tecla", []() {
+
+    if (!server.hasArg("nome")) {
+
+      server.send(400, "text/plain", "Informe o nome");
+
+      return;
+    }
+
+    String nome = server.arg("nome");
+
+    prefs.remove(("key_" + nome).c_str());
+
+    teclasSalvas = prefs.getString("teclas", "");
+
+    String novaLista = "";
+
+    int start = 0;
+
+    while (true) {
+
+      int ini = teclasSalvas.indexOf('|', start);
+
+      if (ini == -1) break;
+
+      int fim = teclasSalvas.indexOf('|', ini + 1);
+
+      if (fim == -1) break;
+
+      String item = teclasSalvas.substring(ini + 1, fim);
+
+      item.trim();
+
+      if (item != nome && item.length() > 0) {
+
+        novaLista += "|" + item + "|";
+      }
+
+      start = fim + 1;
+    }
+
+    prefs.putString("teclas", novaLista);
+
+    Serial.println("Tecla removida: " + nome);
+
+    beepSucesso();
+
+    server.send(200, "text/plain", "Tecla excluída com sucesso");
+  });
+
   server.on("/salvar-cena", []() {
+
     if (!server.hasArg("scene")) {
       server.send(400, "text/plain", "Cena inválida");
       return;
@@ -635,6 +731,7 @@ void setupRotas() {
   });
 
   server.on("/ligar-tv", []() {
+
     Serial.println("Executando cena...");
 
     executarCena();
@@ -643,6 +740,7 @@ void setupRotas() {
   });
 
   server.on("/reset-wifi", []() {
+
     wm.resetSettings();
 
     digitalWrite(LED_PLACA, LOW);
@@ -656,6 +754,7 @@ void setupRotas() {
 }
 
 void setup() {
+
   Serial.begin(115200);
 
   pinMode(LED_PLACA, OUTPUT);
@@ -679,9 +778,11 @@ void setup() {
 }
 
 void loop() {
+
   server.handleClient();
 
   if (modoCaptura && irrecv.decode(&results)) {
+
     ultimoCodigoRaw = rawToString(&results);
 
     Serial.println("");
