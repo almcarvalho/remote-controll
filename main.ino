@@ -319,7 +319,7 @@ String botoesTeclasHtml() {
 
       html += "<button class='success' onclick=\"enviarTecla('";
       html += nome;
-      html += "')\">Enviar</button>";
+      html += "', this)\">Enviar</button>";
 
       html += "<button class='teclaBtn' style='margin-left:6px;' onclick=\"mostrarCodigo('";
       html += nome;
@@ -443,7 +443,7 @@ String htmlPage() {
   html += "<style>";
   html += "body{font-family:Arial;margin:20px;background:#f4f4f4;}";
   html += ".card{background:white;padding:15px;margin-bottom:15px;border-radius:8px;box-shadow:0 2px 5px #ccc;}";
-  html += "button{padding:10px 14px;margin:4px;border:0;border-radius:6px;background:#1976d2;color:white;font-size:15px;}";
+  html += "button{padding:10px 14px;margin:4px;border:0;border-radius:6px;background:#1976d2;color:white;font-size:15px;transition:all 0.2s ease;}";
   html += "button:hover{background:#0d47a1;cursor:pointer;}";
   html += ".danger{background:#c62828;}";
   html += ".success{background:#2e7d32;}";
@@ -452,6 +452,12 @@ String htmlPage() {
   html += ".sceneBtn{background:#455a64;}";
   html += ".itemCena{padding:10px;margin:6px;background:#e3f2fd;border:1px solid #90caf9;border-radius:6px;cursor:move;}";
   html += ".itemDelay{background:#fff3e0;border:1px solid #ffb74d;}";
+  html += ".botaoPiscando{animation:piscarBotao 0.8s ease-in-out 2;}";
+  html += "@keyframes piscarBotao{";
+  html += "0%{background:#2e7d32;transform:scale(1);box-shadow:none;}";
+  html += "50%{background:#00e676;transform:scale(1.08);box-shadow:0 0 15px #00e676;}";
+  html += "100%{background:#2e7d32;transform:scale(1);box-shadow:none;}";
+  html += "}";
   html += "textarea{width:100%;box-sizing:border-box;}";
   html += "input{padding:10px;width:70%;max-width:300px;}";
   html += "</style>";
@@ -578,10 +584,19 @@ String htmlPage() {
   html += ".then(t=>{document.getElementById('codigoSelecionado').value=t;});";
   html += "}";
 
-  html += "function enviarTecla(nome){";
+  html += "function piscarBotao(botao){";
+  html += "if(!botao){return;}";
+  html += "botao.classList.remove('botaoPiscando');";
+  html += "void botao.offsetWidth;";
+  html += "botao.classList.add('botaoPiscando');";
+  html += "setTimeout(()=>{botao.classList.remove('botaoPiscando');},1800);";
+  html += "}";
+
+  html += "function enviarTecla(nome, botao){";
   html += "fetch('/enviar?nome='+encodeURIComponent(nome))";
   html += ".then(r=>r.text())";
-  html += ".then(t=>alert(t));";
+  html += ".then(t=>{piscarBotao(botao);})";
+  html += ".catch(()=>{piscarBotao(botao);});";
   html += "}";
 
   html += "function excluirTecla(nome){";
